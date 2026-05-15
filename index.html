@@ -285,6 +285,10 @@
     </div>
     <div class="config-fields" id="configFields">
       <div>
+        <label>Cloudflare Worker Proxy URL</label>
+        <input type="text" id="cfgProxy" placeholder="https://notion-recipe-proxy.YOUR-SUBDOMAIN.workers.dev" />
+      </div>
+      <div>
         <label>Notion Integration Token</label>
         <input type="password" id="cfgToken" placeholder="ntn_..." />
       </div>
@@ -342,8 +346,12 @@
 </div>
 
 <script>
-const PROXY = 'https://notion-recipe-proxy.mackenziek-mcdonald.workers.dev';
 const NOTION = 'https://api.notion.com/v1';
+function getProxy() {
+  const p = localStorage.getItem('notion_recipe_proxy') || '';
+  if (!p) throw new Error('Cloudflare Worker proxy URL is not set. Open ⚙️ Configuration and add it.');
+  return p;
+}
 
 let selectedFile = null;
 let pdfBase64 = null;
@@ -357,6 +365,7 @@ function cfg(key) {
 }
 
 function saveConfig() {
+  localStorage.setItem('notion_recipe_proxy', document.getElementById('cfgProxy').value.trim());
   localStorage.setItem('notion_recipe_token', document.getElementById('cfgToken').value.trim());
   localStorage.setItem('notion_recipe_recipeDb', document.getElementById('cfgRecipeDb').value.trim());
   localStorage.setItem('notion_recipe_ingredientDb', document.getElementById('cfgIngredientDb').value.trim());
@@ -370,6 +379,7 @@ function toggleConfig() {
   const isOpen = fields.classList.toggle('open');
   toggle.classList.toggle('open', isOpen);
   if (isOpen) {
+    document.getElementById('cfgProxy').value = localStorage.getItem('notion_recipe_proxy') || '';
     document.getElementById('cfgToken').value = cfg('token');
     document.getElementById('cfgRecipeDb').value = cfg('recipeDb');
     document.getElementById('cfgIngredientDb').value = cfg('ingredientDb');
@@ -467,7 +477,7 @@ async function notionPatch(path, body) {
 }
 
 async function claudeParseRecipe() {
-  const res = await fetch(PROXY, {
+  const res = await fetch(getProxy(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
