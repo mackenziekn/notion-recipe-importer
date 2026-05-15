@@ -482,7 +482,7 @@ async function claudeParseRecipe() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
+      max_tokens: 2000,
       messages: [{
         role: 'user',
         content: [
@@ -492,25 +492,47 @@ async function claudeParseRecipe() {
           },
           {
             type: 'text',
-            text: `Extract this recipe's details. Respond ONLY with a JSON object, no markdown, no backticks, no preamble:
-{
-  "recipeName": "string",
-  "tags": ["array of applicable tags from: Breakfast, Lunch, Dinner, Snack, Dessert, Appetizer, Side Dish, Main Course, Vegetarian, Vegan, Gluten-Free, Dairy-Free, Quick & Easy, Meal Prep, Soup, Salad, Pasta, Baked Goods, Grilling, Seafood, Chicken, Beef, Pork, Low-Carb, Healthy"],
-  "source": "string (author, website, or cookbook name if mentioned, else empty string)",
-  "ingredients": [
-    {"name": "ingredient name only, no amounts or prep notes", "amount": "amount with unit as a string", "category": "one of: Produce, Proteins, Dairy & Eggs, Grains & Bread, Pantry & Spices, Condiments & Sauces, Beverages, Baking, Frozen, Other"}
-  ],
-  "notes": "brief cooking notes or description, max 150 chars"
-}`
+            text: `Extract this recipe's details. Respond ONLY with a JSON object, no markdown, no backticks, no preamble:\n{\n  "recipeName": "string",\n  "tags": ["array of applicable tags from: Breakfast, Lunch, Dinner, Snack, Dessert, Appetizer, Side Dish, Main Course, Vegetarian, Vegan, Gluten-Free, Dairy-Free, Quick & Easy, Meal Prep, Soup, Salad, Pasta, Baked Goods, Grilling, Seafood, Chicken, Beef, Pork, Low-Carb, Healthy"],\n  "source": "string (author, website, or cookbook name if mentioned, else empty string)",\n  "ingredients": [\n    {"name": "ingredient name only, no amounts or prep notes", "amount": "amount with unit as a string", "category": "one of: Produce, Proteins, Dairy & Eggs, Grains & Bread, Pantry & Spices, Condiments & Sauces, Beverages, Baking, Frozen, Other"}\n  ],\n  "notes": "brief cooking notes or description, max 150 chars"\n}`
           }
         ]
       }]
     })
   });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error('Proxy/API error ' + res.status + ': ' + errText.slice(0, 200));
+  }
+
   const data = await res.json();
-  const text = data.content.map(b => b.text || '').join('');
-  const clean = text.replace(/```json|```/g, '').trim();
-  return JSON.parse(clean);
+
+  if (data.error) {
+    throw new Error('Anthropic API error: ' + (data.error.message || JSON.stringify(data.error)));
+  }
+
+  if (!data.content || !Array.isArray(data.content)) {
+    throw new Error('Unexpected API response: ' + JSON.stringify(data).slice(0, 300));
+  }
+
+  const text = data.content.map(b => b.text || '').join('').trim();
+  if (!text) throw new Error('Claude returned an empty response. Check your API key and Worker setup.');
+
+  const clean = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+
+  let parsed;
+  try {
+    parsed = JSON.parse(clean);
+  } catch (e) {
+    throw new Error('Could not parse Claude response as JSON. Raw: ' + clean.slice(0, 300));
+  }
+
+  parsed.recipeName = parsed.recipeName || 'Untitled Recipe';
+  parsed.tags = Array.isArray(parsed.tags) ? parsed.tags : [];
+  parsed.ingredients = Array.isArray(parsed.ingredients) ? parsed.ingredients : [];
+  parsed.source = parsed.source || '';
+  parsed.notes = parsed.notes || '';
+
+  return parsed;
 }
 
 async function fetchExistingIngredients() {
