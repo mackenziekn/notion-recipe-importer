@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recipe Importer — Notion</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #FAFAF8;
+    --surface: #FFFFFF;
+    --surface2: #F5F4F0;
+    --border: rgba(0,0,0,0.1);
+    --border-strong: rgba(0,0,0,0.18);
+    --text: #1A1A18;
+    --text-2: #6B6B67;
+    --text-3: #9E9E99;
+    --accent: #1D9E75;
+    --accent-bg: #E1F5EE;
+    --accent-text: #085041;
+    --warn: #BA7517;
+    --warn-bg: #FAEEDA;
+    --warn-text: #633806;
+    --err: #A32D2D;
+    --err-bg: #FCEBEB;
+    --err-text: #501313;
+    --info: #185FA5;
+    --info-bg: #E6F1FB;
+    --info-text: #042C53;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.06);
+  }
+
+  body {
+    font-family: -apple-system, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+    padding: 24px 20px;
+  }
+
+  .app { max-width: 640px; margin: 0 auto; }
+
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+  .header-icon {
+    width: 36px; height: 36px;
+    background: var(--accent-bg);
+    border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .header h1 { font-size: 17px; font-weight: 600; }
+  .header p { font-size: 12px; color: var(--text-2); }
+
+  .config-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .config-toggle {
+    display: flex; align-items: center; justify-content: space-between;
+    cursor: pointer; user-select: none;
+  }
+  .config-toggle span { font-size: 13px; font-weight: 500; color: var(--text-2); }
+  .config-toggle .arrow { font-size: 11px; color: var(--text-3); transition: transform 0.2s; }
+  .config-toggle.open .arrow { transform: rotate(90deg); }
+  .config-fields { margin-top: 14px; display: none; flex-direction: column; gap: 10px; }
+  .config-fields.open { display: flex; }
+
+  label { font-size: 12px; font-weight: 500; color: var(--text-2); display: block; margin-bottom: 4px; }
+  input[type="text"], input[type="password"] {
+    width: 100%; padding: 8px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    font-size: 13px; background: var(--bg);
+    color: var(--text);
+    outline: none; transition: border-color 0.15s;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+  input:focus { border-color: var(--accent); }
+
+  .save-btn {
+    margin-top: 12px;
+    padding: 7px 14px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: opacity 0.15s;
+  }
+  .save-btn:hover { opacity: 0.88; }
+  .saved-badge {
+    display: none;
+    margin-top: 10px; padding: 6px 10px;
+    background: var(--accent-bg); color: var(--accent-text);
+    border-radius: var(--radius-sm); font-size: 12px; font-weight: 500;
+  }
+
+  .upload-zone {
+    background: var(--surface);
+    border: 2px dashed var(--border-strong);
+    border-radius: var(--radius);
+    padding: 40px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+    margin-bottom: 16px;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+  }
+  .upload-zone input[type="file"] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer;
+    width: 100%; height: 100%;
+  }
+  .upload-icon { font-size: 32px; margin-bottom: 10px; color: var(--accent); }
+  .upload-zone h2 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .upload-zone p { font-size: 12px; color: var(--text-2); }
+
+  .file-preview {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    align-items: center;
+    gap: 12px;
+  }
+  .file-preview.show { display: flex; }
+  .file-icon { font-size: 24px; color: var(--err); }
+  .file-info { flex: 1; }
+  .file-info strong { font-size: 13px; font-weight: 500; display: block; }
+  .file-info span { font-size: 12px; color: var(--text-2); }
+  .file-remove {
+    background: none; border: none; cursor: pointer;
+    color: var(--text-3); font-size: 16px; padding: 4px;
+    border-radius: 4px; transition: color 0.15s;
+  }
+  .file-remove:hover { color: var(--err); }
+
+  .import-btn {
+    width: 100%; padding: 11px;
+    background: var(--accent);
+    color: #fff; border: none;
+    border-radius: var(--radius);
+    font-size: 15px; font-weight: 600;
+    cursor: pointer; transition: opacity 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .import-btn:hover:not(:disabled) { opacity: 0.88; }
+  .import-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .log {
+    margin-top: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    display: none;
+  }
+  .log.show { display: block; }
+  .log-header {
+    padding: 10px 14px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px; font-weight: 600; color: var(--text-2);
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .log-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto; }
+
+  .log-item {
+    display: flex; gap: 10px; align-items: flex-start;
+    font-size: 13px; line-height: 1.4;
+  }
+  .log-item .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    margin-top: 4px; flex-shrink: 0;
+  }
+  .log-item.info .dot { background: var(--info); }
+  .log-item.success .dot { background: var(--accent); }
+  .log-item.warn .dot { background: var(--warn); }
+  .log-item.error .dot { background: var(--err); }
+  .log-item.info { color: var(--text); }
+  .log-item.success { color: var(--accent-text); }
+  .log-item.warn { color: var(--warn-text); }
+  .log-item.error { color: var(--err-text); }
+
+  .conflict-card {
+    background: var(--warn-bg);
+    border: 1px solid rgba(186,117,23,0.25);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-top: 12px;
+  }
+  .conflict-card h3 { font-size: 13px; font-weight: 600; color: var(--warn-text); margin-bottom: 8px; }
+  .conflict-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(186,117,23,0.15);
+    gap: 8px; font-size: 13px;
+  }
+  .conflict-item:last-child { border-bottom: none; padding-bottom: 0; }
+  .conflict-names { flex: 1; }
+  .conflict-names .pdf-name { font-weight: 500; }
+  .conflict-names .existing { color: var(--text-2); font-size: 12px; }
+  .conflict-actions { display: flex; gap: 6px; }
+  .conflict-btn {
+    padding: 5px 10px; border-radius: var(--radius-sm);
+    font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid;
+    transition: opacity 0.15s;
+  }
+  .conflict-btn:hover { opacity: 0.8; }
+  .conflict-btn.use { background: var(--accent-bg); color: var(--accent-text); border-color: rgba(15,110,86,0.25); }
+  .conflict-btn.create { background: var(--surface); color: var(--text); border-color: var(--border-strong); }
+
+  .result-card {
+    background: var(--accent-bg);
+    border: 1px solid rgba(29,158,117,0.25);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-top: 16px;
+    display: none;
+  }
+  .result-card.show { display: block; }
+  .result-card h3 { font-size: 14px; font-weight: 600; color: var(--accent-text); margin-bottom: 10px; }
+  .result-link {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 14px; background: var(--accent); color: #fff;
+    border-radius: var(--radius-sm); text-decoration: none;
+    font-size: 13px; font-weight: 500; margin-top: 8px;
+    transition: opacity 0.15s;
+  }
+  .result-link:hover { opacity: 0.88; }
+  .result-pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .pill {
+    padding: 3px 9px; border-radius: 99px;
+    font-size: 12px; font-weight: 500;
+    background: var(--surface); color: var(--text-2);
+    border: 1px solid var(--border-strong);
+  }
+  .pill.new { background: var(--info-bg); color: var(--info-text); border-color: rgba(24,95,165,0.2); }
+
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid rgba(255,255,255,0.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <div class="header-icon">🍳</div>
+    <div>
+      <h1>Recipe Importer</h1>
+      <p>Upload a recipe PDF → auto-create in Notion</p>
+    </div>
+  </div>
+
+  <!-- Config -->
+  <div class="config-section">
+    <div class="config-toggle" id="configToggle" onclick="toggleConfig()">
+      <span>⚙️ &nbsp;Notion Configuration</span>
+      <span class="arrow">▶</span>
+    </div>
+    <div class="config-fields" id="configFields">
+      <div>
+        <label>Notion Integration Token</label>
+        <input type="password" id="cfgToken" placeholder="ntn_..." />
+      </div>
+      <div>
+        <label>Recipes Database ID</label>
+        <input type="text" id="cfgRecipeDb" placeholder="35e4f3a3..." />
+      </div>
+      <div>
+        <label>Ingredients Database ID</label>
+        <input type="text" id="cfgIngredientDb" placeholder="35e4f3a3..." />
+      </div>
+      <button class="save-btn" onclick="saveConfig()">Save Configuration</button>
+      <div class="saved-badge" id="savedBadge">✓ Configuration saved</div>
+    </div>
+  </div>
+
+  <!-- Upload -->
+  <div class="upload-zone" id="uploadZone">
+    <input type="file" id="fileInput" accept=".pdf" onchange="handleFile(event)" />
+    <div class="upload-icon">📄</div>
+    <h2>Drop a recipe PDF here</h2>
+    <p>or click to browse files</p>
+  </div>
+
+  <div class="file-preview" id="filePreview">
+    <div class="file-icon">📕</div>
+    <div class="file-info">
+      <strong id="fileName">—</strong>
+      <span id="fileSize">—</span>
+    </div>
+    <button class="file-remove" onclick="clearFile()" title="Remove">✕</button>
+  </div>
+
+  <!-- Import Button -->
+  <button class="import-btn" id="importBtn" onclick="startImport()" disabled>
+    <div class="spinner" id="spinner"></div>
+    <span id="importLabel">📥 &nbsp;Import Recipe to Notion</span>
+  </button>
+
+  <!-- Conflict resolution -->
+  <div id="conflictArea"></div>
+
+  <!-- Log -->
+  <div class="log" id="log">
+    <div class="log-header">Import Log</div>
+    <div class="log-body" id="logBody"></div>
+  </div>
+
+  <!-- Result -->
+  <div class="result-card" id="resultCard">
+    <h3>✅ Recipe imported successfully!</h3>
+    <div id="resultContent"></div>
+  </div>
+
+</div>
+
+<script>
+const PROXY = 'https://api.anthropic.com/v1/messages';
+const NOTION = 'https://api.notion.com/v1';
+
+let selectedFile = null;
+let pdfBase64 = null;
+let pendingConflicts = [];
+let conflictResolutions = {};
+let parsedRecipeData = null;
+let existingIngredients = [];
+
+function cfg(key) {
+  return localStorage.getItem('notion_recipe_' + key) || '';
+}
+
+function saveConfig() {
+  localStorage.setItem('notion_recipe_token', document.getElementById('cfgToken').value.trim());
+  localStorage.setItem('notion_recipe_recipeDb', document.getElementById('cfgRecipeDb').value.trim());
+  localStorage.setItem('notion_recipe_ingredientDb', document.getElementById('cfgIngredientDb').value.trim());
+  document.getElementById('savedBadge').style.display = 'block';
+  setTimeout(() => document.getElementById('savedBadge').style.display = 'none', 2000);
+}
+
+function toggleConfig() {
+  const toggle = document.getElementById('configToggle');
+  const fields = document.getElementById('configFields');
+  const isOpen = fields.classList.toggle('open');
+  toggle.classList.toggle('open', isOpen);
+  if (isOpen) {
+    document.getElementById('cfgToken').value = cfg('token');
+    document.getElementById('cfgRecipeDb').value = cfg('recipeDb');
+    document.getElementById('cfgIngredientDb').value = cfg('ingredientDb');
+  }
+}
+
+function handleFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  setFile(file);
+}
+
+function setFile(file) {
+  selectedFile = file;
+  document.getElementById('filePreview').classList.add('show');
+  document.getElementById('fileName').textContent = file.name;
+  document.getElementById('fileSize').textContent = (file.size / 1024).toFixed(1) + ' KB';
+  document.getElementById('importBtn').disabled = false;
+
+  const reader = new FileReader();
+  reader.onload = (e) => { pdfBase64 = e.target.result.split(',')[1]; };
+  reader.readAsDataURL(file);
+}
+
+function clearFile() {
+  selectedFile = null; pdfBase64 = null;
+  document.getElementById('filePreview').classList.remove('show');
+  document.getElementById('fileInput').value = '';
+  document.getElementById('importBtn').disabled = true;
+  document.getElementById('conflictArea').innerHTML = '';
+  document.getElementById('resultCard').classList.remove('show');
+  document.getElementById('log').classList.remove('show');
+  document.getElementById('logBody').innerHTML = '';
+}
+
+const uploadZone = document.getElementById('uploadZone');
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); uploadZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type === 'application/pdf') setFile(file);
+});
+
+function log(msg, type = 'info') {
+  const body = document.getElementById('logBody');
+  document.getElementById('log').classList.add('show');
+  const item = document.createElement('div');
+  item.className = 'log-item ' + type;
+  item.innerHTML = `<div class="dot"></div><span>${msg}</span>`;
+  body.appendChild(item);
+  body.scrollTop = body.scrollHeight;
+}
+
+function setLoading(loading) {
+  const btn = document.getElementById('importBtn');
+  const spinner = document.getElementById('spinner');
+  const label = document.getElementById('importLabel');
+  btn.disabled = loading;
+  spinner.style.display = loading ? 'block' : 'none';
+  label.textContent = loading ? 'Importing…' : '📥 \u00a0Import Recipe to Notion';
+}
+
+async function notionGet(path) {
+  const token = cfg('token');
+  const res = await fetch(NOTION + path, {
+    headers: { 'Authorization': 'Bearer ' + token, 'Notion-Version': '2022-06-28' }
+  });
+  if (!res.ok) throw new Error('Notion API error: ' + res.status + ' ' + path);
+  return res.json();
+}
+
+async function notionPost(path, body) {
+  const token = cfg('token');
+  const res = await fetch(NOTION + path, {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error('Notion error: ' + (data.message || res.status));
+  return data;
+}
+
+async function notionPatch(path, body) {
+  const token = cfg('token');
+  const res = await fetch(NOTION + path, {
+    method: 'PATCH',
+    headers: { 'Authorization': 'Bearer ' + token, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error('Notion error: ' + (data.message || res.status));
+  return data;
+}
+
+async function claudeParseRecipe() {
+  const res = await fetch(PROXY, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'document',
+            source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 }
+          },
+          {
+            type: 'text',
+            text: `Extract this recipe's details. Respond ONLY with a JSON object, no markdown, no backticks, no preamble:
+{
+  "recipeName": "string",
+  "tags": ["array of applicable tags from: Breakfast, Lunch, Dinner, Snack, Dessert, Appetizer, Side Dish, Main Course, Vegetarian, Vegan, Gluten-Free, Dairy-Free, Quick & Easy, Meal Prep, Soup, Salad, Pasta, Baked Goods, Grilling, Seafood, Chicken, Beef, Pork, Low-Carb, Healthy"],
+  "source": "string (author, website, or cookbook name if mentioned, else empty string)",
+  "ingredients": [
+    {"name": "ingredient name only, no amounts or prep notes", "amount": "amount with unit as a string", "category": "one of: Produce, Proteins, Dairy & Eggs, Grains & Bread, Pantry & Spices, Condiments & Sauces, Beverages, Baking, Frozen, Other"}
+  ],
+  "notes": "brief cooking notes or description, max 150 chars"
+}`
+          }
+        ]
+      }]
+    })
+  });
+  const data = await res.json();
+  const text = data.content.map(b => b.text || '').join('');
+  const clean = text.replace(/```json|```/g, '').trim();
+  return JSON.parse(clean);
+}
+
+async function fetchExistingIngredients() {
+  let results = [];
+  let cursor = undefined;
+  while (true) {
+    const body = { page_size: 100 };
+    if (cursor) body.start_cursor = cursor;
+    const data = await notionPost('/databases/' + cfg('ingredientDb') + '/query', body);
+    for (const page of data.results) {
+      const nameArr = page.properties['Ingredient Name']?.title || [];
+      const name = nameArr.map(t => t.plain_text).join('');
+      if (name) results.push({ id: page.id, name });
+    }
+    if (!data.has_more) break;
+    cursor = data.next_cursor;
+  }
+  return results;
+}
+
+function fuzzyScore(a, b) {
+  a = a.toLowerCase().trim();
+  b = b.toLowerCase().trim();
+  if (a === b) return 1;
+  if (a.includes(b) || b.includes(a)) return 0.85;
+  const aWords = a.split(/\s+/);
+  const bWords = b.split(/\s+/);
+  const shared = aWords.filter(w => bWords.some(bw => bw.includes(w) || w.includes(bw)));
+  if (shared.length > 0) return 0.6;
+  return 0;
+}
+
+function findMatches(pdfIngredient, existing) {
+  const scored = existing.map(e => ({ ...e, score: fuzzyScore(pdfIngredient, e.name) }));
+  scored.sort((a, b) => b.score - a.score);
+  const top = scored[0];
+  if (top && top.score === 1) return { exact: top, partial: null };
+  if (top && top.score >= 0.6) return { exact: null, partial: top };
+  return { exact: null, partial: null };
+}
+
+function renderConflicts(conflicts) {
+  if (conflicts.length === 0) return Promise.resolve({});
+  return new Promise(resolve => {
+    const area = document.getElementById('conflictArea');
+    const card = document.createElement('div');
+    card.className = 'conflict-card';
+    card.innerHTML = `<h3>⚠️ Review ambiguous ingredient matches (${conflicts.length})</h3>`;
+
+    const resolutions = {};
+    let remaining = conflicts.length;
+
+    function checkDone() {
+      if (Object.keys(resolutions).length === conflicts.length) resolve(resolutions);
+    }
+
+    conflicts.forEach(conflict => {
+      const item = document.createElement('div');
+      item.className = 'conflict-item';
+      item.innerHTML = `
+        <div class="conflict-names">
+          <div class="pdf-name">PDF: "${conflict.pdfName}"</div>
+          <div class="existing">Closest match: "${conflict.existing.name}"</div>
+        </div>
+        <div class="conflict-actions">
+          <button class="conflict-btn use" data-id="${conflict.pdfName}">Use existing</button>
+          <button class="conflict-btn create" data-id="${conflict.pdfName}">Create new</button>
+        </div>`;
+
+      item.querySelector('.use').onclick = () => {
+        resolutions[conflict.pdfName] = { action: 'use', id: conflict.existing.id, name: conflict.existing.name };
+        item.style.opacity = '0.4';
+        item.querySelectorAll('button').forEach(b => b.disabled = true);
+        log(`Using existing ingredient: "${conflict.existing.name}" for "${conflict.pdfName}"`, 'info');
+        checkDone();
+      };
+      item.querySelector('.create').onclick = () => {
+        resolutions[conflict.pdfName] = { action: 'create', category: conflict.category };
+        item.style.opacity = '0.4';
+        item.querySelectorAll('button').forEach(b => b.disabled = true);
+        log(`Will create new ingredient: "${conflict.pdfName}"`, 'info');
+        checkDone();
+      };
+      card.appendChild(item);
+    });
+
+    const continueBtn = document.createElement('button');
+    continueBtn.className = 'save-btn';
+    continueBtn.style.marginTop = '14px';
+    continueBtn.textContent = 'Continue Import →';
+    continueBtn.onclick = () => {
+      conflicts.forEach(c => { if (!resolutions[c.pdfName]) resolutions[c.pdfName] = { action: 'create', category: c.category }; });
+      resolve(resolutions);
+    };
+    card.appendChild(continueBtn);
+    area.appendChild(card);
+
+    log(`${conflicts.length} ambiguous ingredient(s) need your review below ↓`, 'warn');
+  });
+}
+
+async function createIngredient(name, category) {
+  const page = await notionPost('/pages', {
+    parent: { database_id: cfg('ingredientDb') },
+    properties: {
+      'Ingredient Name': { title: [{ text: { content: name } }] },
+      'Tags': { multi_select: [{ name: category }] }
+    }
+  });
+  return page.id;
+}
+
+async function uploadFileToNotion(pageId, file) {
+  const token = cfg('token');
+  // Step 1: Send external file URL is not supported for local files in Notion API v1.
+  // Instead, we upload as a file block using the files property (external URL not possible for local).
+  // For Notion API: files property only supports external URLs. 
+  // We'll attach it as a file block in page body with base64 data URL as external link workaround note.
+  // Actually: Notion API doesn't support direct binary uploads for page content.
+  // Best available: create a file block with a data note, and also set Files property with the file name as text.
+  // We'll add the file name to the Attachments property as a note and add a callout block explaining.
+  log('Note: Notion API does not support direct PDF binary uploads. Adding attachment note to page.', 'warn');
+
+  await notionPatch('/pages/' + pageId, {
+    properties: {}
+  });
+
+  // Add a callout block with the filename
+  await notionPost('/blocks/' + pageId + '/children', {
+    children: [{
+      object: 'block',
+      type: 'callout',
+      callout: {
+        rich_text: [{ type: 'text', text: { content: '📎 Attach PDF manually: ' + file.name } }],
+        icon: { type: 'emoji', emoji: '📄' },
+        color: 'yellow_background'
+      }
+    }]
+  });
+}
+
+async function startImport() {
+  if (!pdfBase64) return;
+  if (!cfg('token') || !cfg('recipeDb') || !cfg('ingredientDb')) {
+    log('Please configure your Notion token and database IDs first (⚙️ above).', 'error');
+    return;
+  }
+
+  setLoading(true);
+  document.getElementById('conflictArea').innerHTML = '';
+  document.getElementById('resultCard').classList.remove('show');
+  document.getElementById('logBody').innerHTML = '';
+
+  try {
+    log('Reading PDF with Claude AI…', 'info');
+    parsedRecipeData = await claudeParseRecipe();
+    log(`Recipe detected: "${parsedRecipeData.recipeName}"`, 'success');
+    log(`Found ${parsedRecipeData.ingredients.length} ingredient(s), ${parsedRecipeData.tags.length} tag(s)`, 'info');
+
+    log('Fetching existing ingredients from Notion…', 'info');
+    existingIngredients = await fetchExistingIngredients();
+    log(`${existingIngredients.length} existing ingredient(s) in database`, 'info');
+
+    const toResolve = [];
+    const autoResolved = {};
+
+    for (const ing of parsedRecipeData.ingredients) {
+      const { exact, partial } = findMatches(ing.name, existingIngredients);
+      if (exact) {
+        autoResolved[ing.name] = { action: 'use', id: exact.id, name: exact.name };
+        log(`Matched: "${ing.name}" → existing "${exact.name}"`, 'success');
+      } else if (partial) {
+        toResolve.push({ pdfName: ing.name, existing: partial, category: ing.category });
+      } else {
+        autoResolved[ing.name] = { action: 'create', category: ing.category };
+        log(`New ingredient: "${ing.name}" will be created`, 'info');
+      }
+    }
+
+    setLoading(false);
+
+    let conflictResolutions = {};
+    if (toResolve.length > 0) {
+      conflictResolutions = await renderConflicts(toResolve);
+    }
+
+    setLoading(true);
+    const allResolutions = { ...autoResolved, ...conflictResolutions };
+
+    const ingredientRelations = [];
+    const newlyCreated = [];
+
+    for (const ing of parsedRecipeData.ingredients) {
+      const res = allResolutions[ing.name];
+      if (!res) continue;
+      if (res.action === 'use') {
+        ingredientRelations.push({ id: res.id });
+        log(`Using: "${res.name}"`, 'success');
+      } else {
+        log(`Creating ingredient: "${ing.name}" (${ing.category})…`, 'info');
+        const newId = await createIngredient(ing.name, ing.category);
+        ingredientRelations.push({ id: newId });
+        newlyCreated.push(ing.name);
+        existingIngredients.push({ id: newId, name: ing.name });
+        log(`Created: "${ing.name}"`, 'success');
+      }
+    }
+
+    log('Creating Recipe page in Notion…', 'info');
+
+    const recipeProps = {
+      'Recipe Name': { title: [{ text: { content: parsedRecipeData.recipeName } }] },
+      'Tags': { multi_select: parsedRecipeData.tags.map(t => ({ name: t })) },
+      'Date Added': { date: { start: new Date().toISOString().split('T')[0] } }
+    };
+
+    if (parsedRecipeData.source) {
+      recipeProps['Source'] = { rich_text: [{ text: { content: parsedRecipeData.source } }] };
+    }
+    if (parsedRecipeData.notes) {
+      recipeProps['Notes'] = { rich_text: [{ text: { content: parsedRecipeData.notes } }] };
+    }
+
+    const recipePage = await notionPost('/pages', {
+      parent: { database_id: cfg('recipeDb') },
+      properties: recipeProps
+    });
+
+    log(`Recipe page created: "${parsedRecipeData.recipeName}"`, 'success');
+
+    // Add ingredient list as page content blocks
+    if (parsedRecipeData.ingredients.length > 0) {
+      const ingBlocks = [
+        {
+          object: 'block', type: 'heading_2',
+          heading_2: { rich_text: [{ type: 'text', text: { content: 'Ingredients' } }] }
+        },
+        ...parsedRecipeData.ingredients.map(ing => ({
+          object: 'block', type: 'bulleted_list_item',
+          bulleted_list_item: {
+            rich_text: [{ type: 'text', text: { content: ing.amount ? ing.amount + ' ' + ing.name : ing.name } }]
+          }
+        }))
+      ];
+      await notionPost('/blocks/' + recipePage.id + '/children', { children: ingBlocks });
+    }
+
+    // Handle PDF attachment
+    log('Noting PDF attachment…', 'info');
+    await uploadFileToNotion(recipePage.id, selectedFile);
+
+    setLoading(false);
+
+    const resultCard = document.getElementById('resultCard');
+    resultCard.classList.add('show');
+    const url = recipePage.url;
+    document.getElementById('resultContent').innerHTML = `
+      <p style="font-size:13px; color: var(--accent-text); margin-bottom:8px;">
+        <strong>${parsedRecipeData.recipeName}</strong> — ${parsedRecipeData.ingredients.length} ingredient(s), ${parsedRecipeData.tags.length} tag(s)
+      </p>
+      <div class="result-pills">
+        ${parsedRecipeData.tags.map(t => `<span class="pill">${t}</span>`).join('')}
+      </div>
+      ${newlyCreated.length ? `<p style="font-size:12px; color: var(--info-text); margin:8px 0;">
+        🆕 New ingredients created: ${newlyCreated.map(n => `<strong>${n}</strong>`).join(', ')}
+      </p>` : ''}
+      <a class="result-link" href="${url}" target="_blank">Open in Notion ↗</a>
+    `;
+
+    log('Import complete! ✓', 'success');
+
+  } catch (err) {
+    setLoading(false);
+    log('Error: ' + err.message, 'error');
+    console.error(err);
+  }
+}
+</script>
+</body>
+</html>
