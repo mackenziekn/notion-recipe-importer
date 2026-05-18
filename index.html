@@ -548,7 +548,7 @@ async function fetchExistingIngredients() {
     if (cursor) body.start_cursor = cursor;
     const data = await notionPost('/databases/' + cfg('ingredientDb') + '/query', body);
     for (const page of data.results) {
-      const nameArr = page.properties['Ingredient Name']?.title || [];
+      const nameArr = page.properties['Ingredient']?.title || [];
       const name = nameArr.map(t => t.plain_text).join('');
       if (name) results.push({ id: page.id, name });
     }
@@ -643,7 +643,7 @@ async function createIngredient(name, category) {
   const page = await notionPost('/pages', {
     parent: { database_id: cfg('ingredientDb') },
     properties: {
-      'Ingredient Name': { title: [{ text: { content: name } }] },
+      'Ingredient': { title: [{ text: { content: name } }] },
       'Tags': { multi_select: [{ name: category }] }
     }
   });
@@ -749,7 +749,7 @@ async function startImport() {
     log('Creating Recipe page in Notion…', 'info');
 
     const recipeProps = {
-      'Recipe Name': { title: [{ text: { content: parsedRecipeData.recipeName } }] },
+      'Recipe': { title: [{ text: { content: parsedRecipeData.recipeName } }] },
       'Tags': { multi_select: parsedRecipeData.tags.map(t => ({ name: t })) },
       'Date Added': { date: { start: new Date().toISOString().split('T')[0] } }
     };
