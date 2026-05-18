@@ -745,6 +745,9 @@ async function startImport() {
     if (parsedRecipeData.notes) {
       recipeProps['Notes'] = { rich_text: [{ text: { content: parsedRecipeData.notes } }] };
     }
+    if (ingredientRelations.length > 0) {
+      recipeProps['Ingredients'] = { relation: ingredientRelations };
+    }
 
     const recipePage = await notionPost('/pages', {
       parent: { database_id: cfg('recipeDb') },
