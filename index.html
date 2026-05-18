@@ -651,21 +651,7 @@ async function createIngredient(name, category) {
 }
 
 async function uploadFileToNotion(pageId, file) {
-  const token = cfg('token');
-  // Step 1: Send external file URL is not supported for local files in Notion API v1.
-  // Instead, we upload as a file block using the files property (external URL not possible for local).
-  // For Notion API: files property only supports external URLs. 
-  // We'll attach it as a file block in page body with base64 data URL as external link workaround note.
-  // Actually: Notion API doesn't support direct binary uploads for page content.
-  // Best available: create a file block with a data note, and also set Files property with the file name as text.
-  // We'll add the file name to the Attachments property as a note and add a callout block explaining.
-  log('Note: Notion API does not support direct PDF binary uploads. Adding attachment note to page.', 'warn');
-
-  await notionPatch('/pages/' + pageId, {
-    properties: {}
-  });
-
-  // Add a callout block with the filename
+  log('Note: Notion API does not support direct PDF uploads. Adding reminder to page.', 'warn');
   await notionPost('/blocks/' + pageId + '/children', {
     children: [{
       object: 'block',
@@ -765,7 +751,7 @@ async function startImport() {
       properties: recipeProps
     });
 
-    log(`Recipe page created: "${parsedRecipeData.recipeName}"`, 'success');
+    log(`Recipe page created: "${parsedRecipeData.recipeName}" (id: ${recipePage.id || 'unknown'})`, 'success');
 
     // Add ingredient list as page content blocks
     if (parsedRecipeData.ingredients.length > 0) {
@@ -784,9 +770,14 @@ async function startImport() {
       await notionPost('/blocks/' + recipePage.id + '/children', { children: ingBlocks });
     }
 
-    // Handle PDF attachment
-    log('Noting PDF attachment…', 'info');
-    await uploadFileToNotion(recipePage.id, selectedFile);
+    // Handle PDF attachment reminder (non-fatal)
+    try {
+      if (recipePage.id) {
+        await uploadFileToNotion(recipePage.id, selectedFile);
+      }
+    } catch (e) {
+      log('Could not add PDF reminder block (non-fatal): ' + e.message, 'warn');
+    }
 
     setLoading(false);
 
