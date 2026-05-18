@@ -751,7 +751,6 @@ async function startImport() {
     const recipeProps = {
       'Recipe': { title: [{ text: { content: parsedRecipeData.recipeName } }] },
       'Tags': { multi_select: parsedRecipeData.tags.map(t => ({ name: t })) },
-      'Date Added': { date: { start: new Date().toISOString().split('T')[0] } }
     };
 
     if (parsedRecipeData.source) {
