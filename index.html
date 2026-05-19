@@ -687,20 +687,7 @@ async function createIngredient(name, category) {
   return page.id;
 }
 
-async function uploadFileToNotion(pageId, file) {
-  log('Note: Notion API does not support direct PDF uploads. Adding reminder to page.', 'warn');
-  await notionPost('/blocks/' + pageId + '/children', {
-    children: [{
-      object: 'block',
-      type: 'callout',
-      callout: {
-        rich_text: [{ type: 'text', text: { content: '📎 Attach PDF manually: ' + file.name } }],
-        icon: { type: 'emoji', emoji: '📄' },
-        color: 'yellow_background'
-      }
-    }]
-  });
-}
+
 
 async function startImport() {
   if (!pdfBase64) return;
@@ -811,14 +798,7 @@ async function startImport() {
       await notionPost('/blocks/' + recipePage.id + '/children', { children: ingBlocks });
     }
 
-    // Handle PDF attachment reminder (non-fatal)
-    try {
-      if (recipePage.id) {
-        await uploadFileToNotion(recipePage.id, selectedFile);
-      }
-    } catch (e) {
-      log('Could not add PDF reminder block (non-fatal): ' + e.message, 'warn');
-    }
+
 
     setLoading(false);
 
@@ -835,6 +815,9 @@ async function startImport() {
       ${newlyCreated.length ? `<p style="font-size:12px; color: var(--info-text); margin:8px 0;">
         🆕 New ingredients created: ${newlyCreated.map(n => `<strong>${n}</strong>`).join(', ')}
       </p>` : ''}
+      <p style="font-size:12px; background: #FAEEDA; color: #633806; border-radius:6px; padding: 8px 10px; margin:10px 0;">
+        📎 Remember to attach <strong>${selectedFile ? selectedFile.name : 'the PDF'}</strong> to this recipe page in Notion.
+      </p>
       <a class="result-link" href="${url}" target="_blank">Open in Notion ↗</a>
     `;
 
