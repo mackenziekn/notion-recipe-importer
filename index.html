@@ -497,7 +497,7 @@ async function claudeParseRecipe() {
           },
           {
             type: 'text',
-            text: `Extract this recipe's details. Respond ONLY with a JSON object, no markdown, no backticks, no preamble:\n{\n  "recipeName": "string",\n  "tags": ["array of applicable tags from: Breakfast, Lunch, Dinner, Snack, Dessert, Appetizer, Side Dish, Main Course, Vegetarian, Vegan, Gluten-Free, Dairy-Free, Quick & Easy, Meal Prep, Soup, Salad, Pasta, Baked Goods, Grilling, Seafood, Chicken, Beef, Pork, Low-Carb, Healthy"],\n  "source": "string (author, website, or cookbook name if mentioned, else empty string)",\n  "ingredients": [\n    {"name": "ingredient name only, no amounts or prep notes", "amount": "amount with unit as a string", "category": "one of: Produce, Proteins, Dairy & Eggs, Grains & Bread, Pantry & Spices, Condiments & Sauces, Beverages, Baking, Frozen, Other"}\n  ],\n  "notes": "brief cooking notes or description, max 150 chars"\n}`
+            text: `Extract this recipe's details. Respond ONLY with a JSON object, no markdown, no backticks, no preamble:\n{\n  "recipeName": "string",\n  "tags": ["choose only applicable tags from this exact list: Dessert, Snack, Breakfast, Chicken, Beef, Seafood, Noodles, Instant Pot, Asian, Soup, Tacos, Side Dish, Gluten-Free, Baked Goods, Quick & Easy, Main Course, Meal Prep, Appetizer, Sauce / Dressing, Vegetarian"],\n  "source": "string (author, website, or cookbook name if mentioned, else empty string)",\n  "ingredients": [\n    {"name": "ingredient name only, no amounts or prep notes", "amount": "amount with unit as a string", "category": "choose only from this exact list: Protein, Produce, Dairy / Fat / Eggs, Condiments & Sauces, Pantry & Spices, Grains & Bread, Frozen Goods, Starch, Dry Goods & Baking, Canned Goods"}\n  ],\n  "notes": "brief cooking notes or description, max 150 chars"\n}`
           }
         ]
       }]
@@ -563,20 +563,29 @@ function fuzzyScore(a, b) {
   b = b.toLowerCase().trim();
   if (a === b) return 1;
   if (a.includes(b) || b.includes(a)) return 0.85;
-  const aWords = a.split(/\s+/);
-  const bWords = b.split(/\s+/);
-  const shared = aWords.filter(w => bWords.some(bw => bw.includes(w) || w.includes(bw)));
-  if (shared.length > 0) return 0.6;
-  return 0;
+  const aWords = a.split(/\s+/).filter(w => w.length > 2);
+  const bWords = b.split(/\s+/).filter(w => w.length > 2);
+  if (aWords.length === 0 || bWords.length === 0) return 0;
+  let matchCount = 0;
+  for (const aw of aWords) {
+    for (const bw of bWords) {
+      if (aw === bw) { matchCount += 1; break; }
+      if (aw.includes(bw) || bw.includes(aw)) { matchCount += 0.7; break; }
+    }
+  }
+  const score = matchCount / Math.max(aWords.length, bWords.length);
+  return score >= 0.4 ? score : 0;
 }
 
 function findMatches(pdfIngredient, existing) {
   const scored = existing.map(e => ({ ...e, score: fuzzyScore(pdfIngredient, e.name) }));
   scored.sort((a, b) => b.score - a.score);
   const top = scored[0];
-  if (top && top.score === 1) return { exact: top, partial: null };
-  if (top && top.score >= 0.6) return { exact: null, partial: top };
-  return { exact: null, partial: null };
+  if (top && top.score === 1) return { exact: top, partials: [] };
+  // Return up to 6 partial matches with a lower threshold so more options are shown
+  const partials = scored.filter(e => e.score >= 0.4).slice(0, 6);
+  if (partials.length > 0) return { exact: null, partials };
+  return { exact: null, partials: [] };
 }
 
 function renderConflicts(conflicts) {
@@ -597,30 +606,53 @@ function renderConflicts(conflicts) {
     conflicts.forEach(conflict => {
       const item = document.createElement('div');
       item.className = 'conflict-item';
-      item.innerHTML = `
-        <div class="conflict-names">
-          <div class="pdf-name">PDF: "${conflict.pdfName}"</div>
-          <div class="existing">Closest match: "${conflict.existing.name}"</div>
-        </div>
-        <div class="conflict-actions">
-          <button class="conflict-btn use" data-id="${conflict.pdfName}">Use existing</button>
-          <button class="conflict-btn create" data-id="${conflict.pdfName}">Create new</button>
-        </div>`;
+      item.style.flexDirection = 'column';
+      item.style.alignItems = 'flex-start';
+      item.style.gap = '8px';
 
-      item.querySelector('.use').onclick = () => {
-        resolutions[conflict.pdfName] = { action: 'use', id: conflict.existing.id, name: conflict.existing.name };
+      const label = document.createElement('div');
+      label.className = 'pdf-name';
+      label.textContent = 'PDF: "' + conflict.pdfName + '"';
+      item.appendChild(label);
+
+      const hint = document.createElement('div');
+      hint.className = 'existing';
+      hint.textContent = 'Select a match or create new:';
+      item.appendChild(hint);
+
+      const actions = document.createElement('div');
+      actions.style.display = 'flex';
+      actions.style.flexWrap = 'wrap';
+      actions.style.gap = '6px';
+
+      function resolve(action, match) {
+        if (action === 'use') {
+          resolutions[conflict.pdfName] = { action: 'use', id: match.id, name: match.name };
+          log(`Using existing ingredient: "${match.name}" for "${conflict.pdfName}"`, 'info');
+        } else {
+          resolutions[conflict.pdfName] = { action: 'create', category: conflict.category };
+          log(`Will create new ingredient: "${conflict.pdfName}"`, 'info');
+        }
         item.style.opacity = '0.4';
         item.querySelectorAll('button').forEach(b => b.disabled = true);
-        log(`Using existing ingredient: "${conflict.existing.name}" for "${conflict.pdfName}"`, 'info');
         checkDone();
-      };
-      item.querySelector('.create').onclick = () => {
-        resolutions[conflict.pdfName] = { action: 'create', category: conflict.category };
-        item.style.opacity = '0.4';
-        item.querySelectorAll('button').forEach(b => b.disabled = true);
-        log(`Will create new ingredient: "${conflict.pdfName}"`, 'info');
-        checkDone();
-      };
+      }
+
+      conflict.matches.forEach(match => {
+        const btn = document.createElement('button');
+        btn.className = 'conflict-btn use';
+        btn.textContent = match.name;
+        btn.onclick = () => resolve('use', match);
+        actions.appendChild(btn);
+      });
+
+      const createBtn = document.createElement('button');
+      createBtn.className = 'conflict-btn create';
+      createBtn.textContent = '+ Create new';
+      createBtn.onclick = () => resolve('create', null);
+      actions.appendChild(createBtn);
+
+      item.appendChild(actions);
       card.appendChild(item);
     });
 
@@ -639,11 +671,16 @@ function renderConflicts(conflicts) {
   });
 }
 
+function toTitleCase(str) {
+  return str.replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+
 async function createIngredient(name, category) {
+  const titleName = toTitleCase(name);
   const page = await notionPost('/pages', {
     parent: { database_id: cfg('ingredientDb') },
     properties: {
-      'Ingredient': { title: [{ text: { content: name } }] },
+      'Ingredient': { title: [{ text: { content: titleName } }] },
       'Tags': { multi_select: [{ name: category }] }
     }
   });
@@ -691,12 +728,12 @@ async function startImport() {
     const autoResolved = {};
 
     for (const ing of parsedRecipeData.ingredients) {
-      const { exact, partial } = findMatches(ing.name, existingIngredients);
+      const { exact, partials } = findMatches(ing.name, existingIngredients);
       if (exact) {
         autoResolved[ing.name] = { action: 'use', id: exact.id, name: exact.name };
         log(`Matched: "${ing.name}" → existing "${exact.name}"`, 'success');
-      } else if (partial) {
-        toResolve.push({ pdfName: ing.name, existing: partial, category: ing.category });
+      } else if (partials.length > 0) {
+        toResolve.push({ pdfName: ing.name, matches: partials, category: ing.category });
       } else {
         autoResolved[ing.name] = { action: 'create', category: ing.category };
         log(`New ingredient: "${ing.name}" will be created`, 'info');
@@ -723,10 +760,11 @@ async function startImport() {
         ingredientRelations.push({ id: res.id });
         log(`Using: "${res.name}"`, 'success');
       } else {
-        log(`Creating ingredient: "${ing.name}" (${ing.category})…`, 'info');
+        const titleName = toTitleCase(ing.name);
+        log(`Creating ingredient: "${titleName}" (${ing.category})…`, 'info');
         const newId = await createIngredient(ing.name, ing.category);
         ingredientRelations.push({ id: newId });
-        newlyCreated.push(ing.name);
+        newlyCreated.push(titleName);
         existingIngredients.push({ id: newId, name: ing.name });
         log(`Created: "${ing.name}"`, 'success');
       }
